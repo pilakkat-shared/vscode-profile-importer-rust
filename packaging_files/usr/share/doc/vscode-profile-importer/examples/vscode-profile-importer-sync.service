@@ -1,0 +1,10 @@
+[Unit]
+Description=Import VSCode profiles and install extensions (user)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env bash -lc 'vscode-profile-importer --non-interactive --profiles-dir "$HOME/.config/Code/User/profiles" "/usr/share/vscode-profile-importer/examples/example.code-profile"'
+
+[Install]
+WantedBy=default.target

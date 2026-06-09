@@ -1,0 +1,24 @@
+# Rust / Cargo
+/target/
+Cargo.lock
+
+# Packaged output
+*.deb
+*.tar.gz
+*.tar.xz
+
+# VS Code profile files used for local testing only
+*.code-profile
+
+# graphify outputs
+graphify-out/
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Nested duplicate directory (artefact of earlier scaffolding)
+/vscode-profile-importer-rust/

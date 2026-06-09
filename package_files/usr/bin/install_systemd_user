@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Helper to install example systemd user units and enable the timer.
+# This script is a thin wrapper that calls the Python helper if available,
+# otherwise performs the copy using shell utilities.
+
+set -e
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+PY_HELPER="$SCRIPT_DIR/install_systemd_user.py"
+
+usage() {
+  cat <<'EOF'
+Usage: install_systemd_user [--yes] [--user-dir DIR]
+
+Installs example systemd user units from the package into ~/.config/systemd/user
+and enables the example timer.
+
+Examples:
+  install_systemd_user
+  install_systemd_user --yes
+
+For more information, see: man install_systemd_user
+EOF
+}
+
+YES=0
+USER_DIR="$HOME/.config"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -y|--yes) YES=1; shift ;;
+    --user-dir) USER_DIR="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1"; usage; exit 2 ;;
+  esac
+done
+
+if [ -x "$PY_HELPER" ]; then
+  if [ $YES -eq 1 ]; then
+    "$PY_HELPER" -y --user-dir "$USER_DIR"
+  else
+    "$PY_HELPER" --user-dir "$USER_DIR"
+  fi
+  exit $?
+fi
+
+SRC_DIR="/usr/share/doc/vscode-profile-importer/examples"
+TARGET_DIR="$USER_DIR/systemd/user"
+
+if [ ! -d "$SRC_DIR" ]; then
+  echo "Example systemd units not found in $SRC_DIR" >&2
+  exit 2
+fi
+
+echo "This will copy example systemd user units from $SRC_DIR to $TARGET_DIR"
+if [ $YES -ne 1 ]; then
+  read -p "Proceed? [y/N] " yn
+  case "$yn" in
+    [Yy]* ) ;;
+    * ) echo "Aborted"; exit 1;;
+  esac
+fi
+
+mkdir -p "$TARGET_DIR"
+cp "$SRC_DIR"/vscode-profile-importer-sync.* "$TARGET_DIR/"
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user daemon-reload || true
+  systemctl --user enable --now vscode-profile-importer-sync.timer || true
+  echo "Timer enabled (or attempted)."
+else
+  echo "systemctl not available; units copied to $TARGET_DIR. Enable the timer manually." >&2
+fi
+
+exit 0

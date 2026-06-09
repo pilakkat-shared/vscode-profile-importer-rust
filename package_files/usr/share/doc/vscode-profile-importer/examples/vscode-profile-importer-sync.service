@@ -1,0 +1,12 @@
+[Unit]
+Description=Import VSCode profiles and install extensions (user)
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Edit the ExecStart to point to the desired profile file. The example below
+# uses a placeholder path. Use --non-interactive to avoid prompts when run as a timer.
+ExecStart=/usr/bin/env bash -lc 'vscode-profile-importer --non-interactive --profiles-dir "$HOME/.config/Code/User/profiles" "/usr/share/vscode-profile-importer/examples/example.code-profile"'
+
+[Install]
+WantedBy=default.target

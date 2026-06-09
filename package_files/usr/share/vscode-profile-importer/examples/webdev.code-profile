@@ -1,0 +1,11 @@
+{
+  "name": "WebDev Example",
+  "icon": "code",
+  "settings": {"settings": {"editor.formatOnSave": true}},
+  "extensions": [
+    {"identifier": {"id": "esbenp.prettier-vscode"}, "displayName": "Prettier - Code formatter"},
+    {"identifier": {"id": "ritwickdey.liveserver"}, "displayName": "Live Server"},
+    {"identifier": {"id": "eamodio.gitlens"}, "displayName": "GitLens"},
+    {"identifier": {"id": "dbaeumer.vscode-eslint"}, "displayName": "ESLint"}
+  ]
+}

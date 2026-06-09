@@ -1,0 +1,47 @@
+.TH INSTALL_SYSTEMD_USER 1 "2026-06-09" "vscode-profile-importer" "User Commands"
+.SH NAME
+install_systemd_user \- install example systemd user units for vscode-profile-importer
+.SH SYNOPSIS
+.B install_systemd_user
+\fI[--yes]\fP \fI[--user-dir DIR]\fP
+.SH DESCRIPTION
+The
+.BR install_systemd_user
+utility copies example systemd user service and timer units packaged with
+vscode-profile-importer into the invoking user's
+.BR ~/.config/systemd/user
+directory and enables the example timer. The timer will run the example
+service periodically to import a configured profile.
+.SH OPTIONS
+.TP
+.B --yes
+Assume yes for interactive prompts.
+.TP
+.B --user-dir DIR
+Base user configuration directory (defaults to ~/.config).
+.SH EXAMPLES
+.PP
+Copy units and enable the timer for the current user (interactive):
+.RS
+.nf
+install_systemd_user
+.fi
+.RE
+
+.PP
+Copy units and enable the timer non-interactively:
+.RS
+.nf
+install_systemd_user --yes
+.fi
+.RE
+
+.PP
+After installing units, check the timer status:
+.RS
+.nf
+systemctl --user status vscode-profile-importer-sync.timer
+.fi
+.RE
+.SH AUTHOR
+Written by OpenCode.

@@ -1,0 +1,4 @@
+{
+  "name": "RustDev",
+  "extensions": ["rust-lang.rust"]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Rust Example",
+  "icon": "package",
+  "settings": {"settings": {"rust-analyzer.cargo.runBuildScripts": true}},
+  "extensions": [
+    {"identifier": {"id": "rust-lang.rust-analyzer"}, "displayName": "rust-analyzer"},
+    {"identifier": {"id": "vadimcn.vscode-lldb"}, "displayName": "CodeLLDB"},
+    {"identifier": {"id": "swellaby.rust-mod"}, "displayName": "Rust Mod"}
+  ]
+}

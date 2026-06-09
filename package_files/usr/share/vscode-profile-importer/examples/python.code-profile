@@ -1,0 +1,10 @@
+{
+  "name": "Python Example",
+  "icon": "python",
+  "settings": {"settings": {"python.formatting.provider": "black"}},
+  "extensions": [
+    {"identifier": {"id": "ms-python.python"}, "displayName": "Python"},
+    {"identifier": {"id": "ms-python.vscode-pylance"}, "displayName": "Pylance"},
+    {"identifier": {"id": "ms-toolsai.jupyter"}, "displayName": "Jupyter"}
+  ]
+}

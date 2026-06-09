@@ -1,0 +1,9 @@
+[Unit]
+Description=Run VSCode profile importer periodically (user)
+
+[Timer]
+OnCalendar=*-*-* *:00/6:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
