@@ -36,7 +36,8 @@ fn cli_dry_run_prints_imported() -> Result<(), Box<dyn std::error::Error>> {
     let storage = fake_vscode_env(&tmp, "CliTest");
 
     let mut cmd = Command::cargo_bin("vscode-profile-importer")?;
-    cmd.arg(prof.to_str().unwrap())
+    cmd.arg("import")
+        .arg(prof.to_str().unwrap())
         .arg("--storage-json").arg(storage.to_str().unwrap())
         .arg("--dry-run")
         .arg("--non-interactive")

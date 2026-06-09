@@ -51,7 +51,8 @@ exit 0
     // Run the importer with fake code on PATH.
     let path_env = format!("{}:{}", bin.to_str().unwrap(), std::env::var("PATH").unwrap_or_default());
     let mut cmd = Command::cargo_bin("vscode-profile-importer")?;
-    cmd.arg(prof.to_str().unwrap())
+    cmd.arg("import")
+        .arg(prof.to_str().unwrap())
         .arg("--storage-json").arg(storage_json.to_str().unwrap())
         .arg("--non-interactive")
         .arg("--no-use-code-cli") // profile already exists; skip creation

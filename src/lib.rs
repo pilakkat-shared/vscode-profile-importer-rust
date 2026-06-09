@@ -187,6 +187,147 @@ pub fn patch_icon(name: &str, icon: &str, storage_json: &Path) -> Result<(), Imp
     Ok(())
 }
 
+// ── Profile listing ───────────────────────────────────────────────────────
+
+/// A single registered VS Code profile as read from `storage.json`.
+#[derive(Debug, Clone)]
+pub struct ProfileInfo {
+    /// Display name (the string the user sees in VS Code).
+    pub name: String,
+    /// Internal hashed location key (e.g. `-7f581919`).
+    pub location: String,
+    /// Optional icon identifier.
+    pub icon: Option<String>,
+    /// Number of extensions installed (read from `extensions.json` in the
+    /// profile directory), or `None` if the file could not be read.
+    pub ext_count: Option<usize>,
+    /// `true` for the synthetic Default entry.
+    pub is_default: bool,
+}
+
+/// Read all registered profiles from `storage.json` and return them together
+/// with a synthetic Default entry (mirrors the bash `get_profiles_json`).
+///
+/// Profiles with `location == "builtin/agents"` are skipped because they are
+/// read-only and not manageable by extension commands.
+pub fn list_profiles(storage_json: &Path) -> Result<Vec<ProfileInfo>, ImportError> {
+    let user_dir = storage_json
+        .parent() // globalStorage
+        .and_then(|p| p.parent()) // User
+        .ok_or_else(|| ImportError::Invalid("Cannot resolve User dir".into()))?;
+    let profiles_dir = user_dir.join("profiles");
+
+    let data = fs::read_to_string(storage_json)?;
+    let v: Value = serde_json::from_str(&data)?;
+
+    let mut results = Vec::new();
+
+    // Synthetic Default entry — extensions.json lives directly in User/
+    let default_ext = user_dir.join("extensions.json");
+    let default_count = if default_ext.exists() {
+        fs::read_to_string(&default_ext)
+            .ok()
+            .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+            .and_then(|v| v.as_array().map(|a| a.len()))
+    } else {
+        None
+    };
+    results.push(ProfileInfo {
+        name: "Default".to_string(),
+        location: "__default__".to_string(),
+        icon: None,
+        ext_count: default_count,
+        is_default: true,
+    });
+
+    // Named profiles from userDataProfiles
+    if let Some(arr) = v.get("userDataProfiles").and_then(|p| p.as_array()) {
+        for entry in arr {
+            let loc = entry.get("location").and_then(|l| l.as_str()).unwrap_or("").to_string();
+            if loc == "builtin/agents" {
+                continue; // read-only, skip
+            }
+            let name = entry.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+            let icon = entry.get("icon").and_then(|i| i.as_str()).map(|s| s.to_string());
+
+            let ext_file = profiles_dir.join(&loc).join("extensions.json");
+            let ext_count = if ext_file.exists() {
+                fs::read_to_string(&ext_file)
+                    .ok()
+                    .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                    .and_then(|v| v.as_array().map(|a| a.len()))
+            } else {
+                None
+            };
+
+            results.push(ProfileInfo { name, location: loc, icon, ext_count, is_default: false });
+        }
+    }
+
+    Ok(results)
+}
+
+// ── Extension management ───────────────────────────────────────────────────
+
+/// List extensions installed in a named profile by running
+/// `code [--profile <name>] --list-extensions`.
+///
+/// Returns a list of extension IDs exactly as reported by VS Code.
+/// For the `Default` profile the `--profile` flag is omitted.
+pub fn list_extensions_for_profile(
+    profile_name: &str,
+    code: &Path,
+) -> Result<Vec<String>, ImportError> {
+    let mut cmd = std::process::Command::new(code);
+    if profile_name != "Default" {
+        cmd.args(["--profile", profile_name]);
+    }
+    cmd.arg("--list-extensions");
+
+    let output = cmd.output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let ids: Vec<String> = stdout
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        // strip VS Code deprecation noise
+        .filter(|l| !l.starts_with("DeprecationWarning") && !l.starts_with("node:"))
+        .map(String::from)
+        .collect();
+
+    Ok(ids)
+}
+
+/// Uninstall a single extension from a named profile.
+/// Calls `code [--profile <name>] --uninstall-extension <id>`.
+pub fn uninstall_extension(
+    profile_name: &str,
+    ext_id: &str,
+    code: &Path,
+    dry_run: bool,
+) -> Result<(), ImportError> {
+    if dry_run {
+        return Ok(());
+    }
+    let mut cmd = std::process::Command::new(code);
+    if profile_name != "Default" {
+        cmd.args(["--profile", profile_name]);
+    }
+    cmd.args(["--uninstall-extension", ext_id]);
+
+    let status = cmd.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ImportError::Invalid(format!(
+            "uninstall-extension failed for '{}' (exit {})",
+            ext_id,
+            status.code().unwrap_or(-1)
+        )))
+    }
+}
+
 // ── Import report ──────────────────────────────────────────────────────────
 
 pub type Report = HashMap<String, Value>;
@@ -876,4 +1017,78 @@ mod tests {
         assert_eq!(extract_ext_id(&json!({"id": "z"})).as_deref(), Some("z"));
         assert_eq!(extract_ext_id(&json!(null)), None);
     }
+
+    // ── list_profiles ──────────────────────────────────────────────────────
+
+    fn make_storage_with_profiles(tmp: &tempfile::TempDir, profiles: &[(&str, &str)]) -> PathBuf {
+        let gs = tmp.path().join("globalStorage");
+        fs::create_dir_all(&gs).unwrap();
+        let mut entries = vec![];
+        for (name, loc) in profiles {
+            let pd = tmp.path().join("profiles").join(loc);
+            fs::create_dir_all(&pd).unwrap();
+            // write a fake extensions.json with 2 extensions
+            fs::write(
+                pd.join("extensions.json"),
+                br#"[{"id":"a.b"},{"id":"c.d"}]"#,
+            ).unwrap();
+            entries.push(serde_json::json!({"name": name, "location": loc, "icon": ""}));
+        }
+        let s = serde_json::json!({"userDataProfiles": entries});
+        let p = gs.join("storage.json");
+        fs::write(&p, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+        p
+    }
+
+    #[test]
+    fn test_list_profiles_basic() {
+        let tmp = tempdir().unwrap();
+        let sp = make_storage_with_profiles(&tmp, &[("MyProfile", "-abc"), ("Other", "-def")]);
+        let profiles = list_profiles(&sp).unwrap();
+        // Always includes Default
+        assert!(profiles.iter().any(|p| p.name == "Default"));
+        assert!(profiles.iter().any(|p| p.name == "MyProfile"));
+        assert!(profiles.iter().any(|p| p.name == "Other"));
+    }
+
+    #[test]
+    fn test_list_profiles_ext_count() {
+        let tmp = tempdir().unwrap();
+        let sp = make_storage_with_profiles(&tmp, &[("Counted", "-ccc")]);
+        let profiles = list_profiles(&sp).unwrap();
+        let p = profiles.iter().find(|p| p.name == "Counted").unwrap();
+        assert_eq!(p.ext_count, Some(2));
+    }
+
+    #[test]
+    fn test_list_profiles_skips_builtin_agents() {
+        let tmp = tempdir().unwrap();
+        let gs = tmp.path().join("globalStorage");
+        fs::create_dir_all(&gs).unwrap();
+        let s = serde_json::json!({"userDataProfiles": [
+            {"name": "Agents", "location": "builtin/agents"},
+            {"name": "Real",   "location": "-real"}
+        ]});
+        let sp = gs.join("storage.json");
+        fs::write(&sp, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+        let profiles = list_profiles(&sp).unwrap();
+        assert!(!profiles.iter().any(|p| p.name == "Agents"));
+        assert!(profiles.iter().any(|p| p.name == "Real"));
+    }
+
+    #[test]
+    fn test_list_profiles_default_always_present() {
+        let tmp = tempdir().unwrap();
+        let gs = tmp.path().join("globalStorage");
+        fs::create_dir_all(&gs).unwrap();
+        let s = serde_json::json!({"userDataProfiles": []});
+        let sp = gs.join("storage.json");
+        fs::write(&sp, serde_json::to_string_pretty(&s).unwrap()).unwrap();
+        let profiles = list_profiles(&sp).unwrap();
+        assert_eq!(profiles[0].name, "Default");
+        assert!(profiles[0].is_default);
+    }
+
+    // ── list_extensions_for_profile / uninstall_extension ─────────────────
+    // (tested via CLI integration tests in tests/management_integration.rs)
 }
